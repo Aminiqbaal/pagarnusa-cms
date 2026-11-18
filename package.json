@@ -1,0 +1,37 @@
+{
+  "name": "pn-gresik-cms",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && firebase deploy --only hosting,firestore",
+    "seed": "node scripts/seed.cjs",
+    "set-role": "node scripts/set-role.cjs",
+    "sync-claims": "node scripts/sync-claims.cjs",
+    "build:app": "vite build && cap sync",
+    "android": "npm run build && cap sync android && cap open android",
+    "android:run": "npm run build && cap sync android && cap run android",
+    "ios": "vite build && cap sync ios && cap open ios",
+    "release:set": "node scripts/release-set.cjs",
+    "check:secrets": "node scripts/check-secrets.cjs",
+    "prebuild": "node scripts/check-env.cjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/share": "^8.0.3",
+    "@capacitor/status-bar": "^8.0.4",
+    "firebase": "10.14.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "firebase-admin": "12.7.0",
+    "vite": "5.4.11"
+  }
+}

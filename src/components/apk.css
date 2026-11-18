@@ -1,0 +1,8 @@
+.apk{display:flex;flex-direction:column;gap:4px;align-items:flex-start;margin-top:14px}
+.apk.compact{align-items:center;text-align:center}
+.apk-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:10px;background:var(--acc,#1f6b4f);color:#fff;text-decoration:none;font-weight:600;font-size:15px}
+.apk-btn:hover{filter:brightness(1.08)}
+.apk-btn.off{background:var(--line,#dde2db);color:var(--mute,#66726b);cursor:not-allowed}
+.apk-ver{background:rgba(255,255,255,.22);border-radius:20px;padding:0 9px;font-size:12.5px}
+.apk-btn.off .apk-ver{background:rgba(0,0,0,.08)}
+.apk-meta{font-size:13px;color:var(--mute,#66726b)}

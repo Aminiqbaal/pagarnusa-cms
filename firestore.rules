@@ -1,0 +1,378 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // Peran dibaca dari dokumen users/{uid} (bukan custom claims), sehingga jabatan bisa diubah dari website.
+    function signedIn() { return request.auth != null; }
+    function me()       { return get(/databases/$(db)/documents/users/$(request.auth.uid)).data; }
+    function role()     { return me().role; }
+    function myOrg()    { return me().org_id; }
+    function myPath()   { return me().hierarki_path; }
+    function isAdmin()  { return signedIn() && me().role in ['super_admin','admin_pusat','admin_wilayah','admin_cabang','admin_pac','admin_rayon','admin_ranting'] && me().get('status_aktif', true) == true; }
+    function rlv(r) {
+      return r == 'super_admin' ? -1 : r == 'admin_pusat' ? 0 : r == 'admin_wilayah' ? 1 : r == 'admin_cabang' ? 2 : r == 'admin_pac' ? 3
+           : (r == 'admin_rayon' || r == 'admin_ranting') ? 4 : 5;
+    }
+    function isTop()   { return role() in ['admin_pusat','super_admin']; }
+    function roleFor(t) {
+      return t == 'pusat' ? 'admin_pusat' : t == 'wilayah' ? 'admin_wilayah' : t == 'cabang' ? 'admin_cabang'
+           : t == 'pac' ? 'admin_pac' : t == 'rayon' ? 'admin_rayon' : 'admin_ranting';
+    }
+    function orgDoc(id)     { return get(/databases/$(db)/documents/organizations/$(id)).data; }
+    function orgPath(id)    { return orgDoc(id).hierarki_path; }
+    function orgParent(id)  { return orgDoc(id).parent_id; }
+    function inScopeOrg(id) { return isAdmin() && myOrg() in orgPath(id); }
+    // Role baru harus 'member' atau admin sesuai tingkat unit, dan admin hanya boleh menunjuk role di bawah jabatannya.
+    function userRoleOk(newRole, orgId) {
+      return newRole == 'member'
+        || (newRole == roleFor(orgDoc(orgId).tingkat) && rlv(newRole) > rlv(role()))
+        || (role() == 'super_admin' && newRole == 'super_admin' && orgDoc(orgId).tingkat == 'pusat');
+    }
+    function donAfter(id) { return getAfter(/databases/$(db)/documents/unit_donations/$(id)).data; }
+    function namaOk(d)    { return d.nama is string && d.nama.size() > 0 && d.nama.size() <= 60; }
+    function uktFinal(d)  { return d.status_verifikasi == 'disetujui_cabang'; }
+    function sabukOk(v)   { return v in ['Putih','Kuning','Merah','Biru','Coklat','Hitam']; }
+    function skJenisOk(j) {
+      return (role() == 'admin_cabang' && j == 'ranting_rayon') || (role() == 'admin_wilayah' && j == 'pac') || (isTop() && j == 'cabang');
+    }
+
+    // ---------- Unit (publik dibaca untuk website) ----------
+    match /organizations/{id} {
+      allow read: if true;
+      allow create, delete: if isAdmin() && isTop();
+      allow update: if isAdmin() && (isTop()
+        || (id == myOrg() && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['deskripsi','alamat','jadwal_latihan','ketua_nama','sekretaris_nama','kontak_wa','updated_at'])));
+    }
+
+    // ---------- Pengguna / anggota ----------
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || (isAdmin() && myOrg() in resource.data.hierarki_path));
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['nia','nama_lengkap','alamat','email','role','org_id','hierarki_path','status_aktif','kualifikasi','sabuk','created_at','created_by'])
+        && request.resource.data.status_aktif == true
+        && sabukOk(request.resource.data.sabuk)
+        && request.resource.data.created_by == request.auth.uid
+        && inScopeOrg(request.resource.data.org_id)
+        && request.resource.data.hierarki_path == orgPath(request.resource.data.org_id)
+        && userRoleOk(request.resource.data.role, request.resource.data.org_id);
+      allow update: if
+        (request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nama_lengkap','foto_url','no_hp','alamat','fcm_tokens','updated_at']))
+        || (isAdmin() && request.auth.uid != uid && myOrg() in resource.data.hierarki_path
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nama_lengkap','alamat','kualifikasi','status_aktif','sabuk','role','updated_at'])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['status_aktif']) || role() == 'super_admin' || rlv(resource.data.role) > rlv(role()))
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['sabuk']) || sabukOk(request.resource.data.sabuk))
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
+              || (rlv(resource.data.role) > rlv(role()) && userRoleOk(request.resource.data.role, resource.data.org_id))));
+      allow delete: if false;
+      match /bookmarks/{pid} { allow read, write: if request.auth.uid == uid; }
+    }
+
+    match /nia_registry/{nia} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasOnly(['uid','org_id','created_at'])
+        && inScopeOrg(request.resource.data.org_id);
+      allow update, delete: if false;
+    }
+
+    // ---------- Konten ----------
+    // Publik: konten terbit bertanda publik dapat dibaca siapa saja (untuk website unit).
+    match /posts/{id} {
+      allow read: if (resource.data.status == 'published' && resource.data.get('publik', false) == true)
+        || (signedIn() && (
+              (isAdmin() && myOrg() in resource.data.hierarki_path)
+              || (resource.data.status == 'published' && resource.data.target_org_id in myPath())));
+      allow create: if inScopeOrg(request.resource.data.target_org_id)
+        && request.resource.data.hierarki_path == orgPath(request.resource.data.target_org_id)
+        && request.resource.data.author_uid == request.auth.uid;
+      allow update: if isAdmin() && myOrg() in resource.data.hierarki_path
+        && inScopeOrg(request.resource.data.target_org_id)
+        && request.resource.data.hierarki_path == orgPath(request.resource.data.target_org_id);
+      allow delete: if isAdmin() && myOrg() in resource.data.hierarki_path;
+    }
+
+    match /post_categories/{id} {
+      allow read: if signedIn();
+      allow create: if isAdmin() && request.resource.data.org_id == myOrg() && namaOk(request.resource.data);
+      allow update: if isAdmin() && resource.data.org_id == myOrg() && request.resource.data.org_id == myOrg() && namaOk(request.resource.data);
+      allow delete: if isAdmin() && resource.data.org_id == myOrg();
+    }
+
+    match /events/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---------- Role & menu ----------
+    match /role_types/{id} {
+      allow read: if signedIn();
+      allow create: if isAdmin() && request.resource.data.org_id == myOrg() && namaOk(request.resource.data);
+      allow update: if isAdmin() && resource.data.org_id == myOrg() && request.resource.data.org_id == myOrg() && namaOk(request.resource.data);
+      allow delete: if isAdmin() && resource.data.org_id == myOrg();
+    }
+    match /role_menus/{id} {
+      allow read: if signedIn();
+      allow create: if isAdmin() && request.resource.data.org_id == myOrg()
+        && request.resource.data.role != 'member' && rlv(role()) < rlv(request.resource.data.role)
+        && request.resource.data.menus is list;
+      allow update: if isAdmin() && resource.data.org_id == myOrg() && request.resource.data.org_id == myOrg()
+        && request.resource.data.role != 'member' && rlv(role()) < rlv(request.resource.data.role)
+        && request.resource.data.menus is list;
+      allow delete: if isAdmin() && resource.data.org_id == myOrg() && rlv(role()) < rlv(resource.data.role);
+    }
+
+    // ---------- UKT ----------
+    // Diajukan ranting/rayon (mandiri atau didelegasikan ke PAC) -> diverifikasi PAC -> PAC mengajukan sertifikat ke Cabang -> Cabang menerbitkan.
+    match /ukt_registrations/{id} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid
+        || (isAdmin() && myOrg() in resource.data.hierarki_path));
+      allow create: if
+        (signedIn() && request.resource.data.uid == request.auth.uid
+          && request.resource.data.status_verifikasi == 'pending'
+          && request.resource.data.hierarki_path == myPath())
+        || (isAdmin() && role() in ['admin_ranting','admin_rayon','admin_pac']
+          && request.resource.data.keys().hasOnly(['uid','nama_peserta','org_id','pac_id','cabang_id','hierarki_path','sabuk_asal','sabuk_tujuan','periode_ukt','pelaksana','status_verifikasi','riwayat','created_by','created_at'])
+          && (request.resource.data.org_id == myOrg() || (role() == 'admin_pac' && inScopeOrg(request.resource.data.org_id)))
+          && request.resource.data.status_verifikasi == 'pending'
+          && request.resource.data.created_by == request.auth.uid
+          && request.resource.data.hierarki_path == orgPath(request.resource.data.org_id));
+      allow update: if isAdmin() && myOrg() in resource.data.hierarki_path
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status_verifikasi','catatan_revisi','updated_at','nomor_sertifikat','riwayat'])
+        && (
+          (role() == 'admin_pac' && resource.data.status_verifikasi == 'pending'
+            && request.resource.data.status_verifikasi in ['disetujui_pac','revisi'])
+          || (role() == 'admin_pac' && resource.data.status_verifikasi == 'disetujui_pac'
+            && request.resource.data.status_verifikasi == 'diajukan_cabang')
+          || (role() == 'admin_cabang' && resource.data.status_verifikasi == 'diajukan_cabang'
+            && request.resource.data.status_verifikasi in ['disetujui_cabang','disetujui_pac'])
+          || (role() in ['admin_ranting','admin_rayon'] && resource.data.status_verifikasi == 'revisi'
+            && request.resource.data.status_verifikasi == 'pending')
+        )
+        && (uktFinal(request.resource.data) ? request.resource.data.nomor_sertifikat is string : true);
+      allow delete: if false;
+    }
+
+    // ---------- SK Kepengurusan ----------
+    // Ranting/Rayon -> PAC (meneruskan) -> Cabang (melantik);  PAC -> Cabang -> Wilayah;  Cabang -> Wilayah -> Pusat.
+    match /sk_requests/{id} {
+      allow read: if isAdmin() && myOrg() in resource.data.hierarki_path;
+      allow create: if isAdmin() && role() in ['admin_ranting','admin_rayon','admin_pac','admin_cabang']
+        && request.resource.data.keys().hasOnly(['org_id','org_nama','tingkat','jenis','parent_id','issuer_id','hierarki_path','periode','nama_ketua','nama_sekretaris','pengurus','catatan','status','riwayat','created_by','created_by_nama','created_at'])
+        && request.resource.data.org_id == myOrg()
+        && request.resource.data.tingkat == orgDoc(myOrg()).tingkat
+        && request.resource.data.jenis == (role() in ['admin_ranting','admin_rayon'] ? 'ranting_rayon' : role() == 'admin_pac' ? 'pac' : 'cabang')
+        && request.resource.data.parent_id == orgParent(myOrg())
+        && request.resource.data.issuer_id == orgParent(orgParent(myOrg()))
+        && request.resource.data.hierarki_path == orgPath(myOrg())
+        && request.resource.data.status == 'diajukan'
+        && request.resource.data.created_by == request.auth.uid;
+      allow update: if isAdmin() && (
+          // unit induk meneruskan atau meminta revisi
+          (myOrg() == resource.data.parent_id && resource.data.status == 'diajukan'
+            && request.resource.data.status in ['diteruskan','revisi']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','riwayat','updated_at','catatan_revisi']))
+          // unit pelantik menerbitkan SK atau meminta revisi
+          || (myOrg() == resource.data.issuer_id && resource.data.status == 'diteruskan'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','riwayat','updated_at','catatan_revisi','nomor_sk','tanggal_pelantikan','tempat_penetapan','file'])
+            && ((request.resource.data.status == 'dilantik' && request.resource.data.nomor_sk is string && request.resource.data.tanggal_pelantikan is string)
+                || request.resource.data.status == 'revisi'))
+          // pemohon memperbaiki dan mengajukan ulang
+          || (myOrg() == resource.data.org_id && resource.data.status == 'revisi' && request.resource.data.status == 'diajukan'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','riwayat','updated_at','catatan_revisi','periode','nama_ketua','nama_sekretaris','pengurus','catatan']))
+        );
+      allow delete: if isAdmin() && myOrg() == resource.data.org_id && resource.data.status in ['diajukan','revisi'];
+
+      // Berkas SK yang diterbitkan (dipecah dalam potongan base64)
+      match /chunks/{c} {
+        allow read: if isAdmin() && myOrg() in get(/databases/$(db)/documents/sk_requests/$(id)).data.hierarki_path;
+        allow create, update: if isAdmin()
+          && get(/databases/$(db)/documents/sk_requests/$(id)).data.issuer_id == myOrg()
+          && get(/databases/$(db)/documents/sk_requests/$(id)).data.status in ['diteruskan','dilantik']
+          && request.resource.data.keys().hasOnly(['i','data']) && request.resource.data.data.size() <= 800000;
+        allow delete: if isAdmin() && get(/databases/$(db)/documents/sk_requests/$(id)).data.issuer_id == myOrg();
+      }
+    }
+
+    // Template SK: diunggah unit pelantik sesuai jenjang (Cabang: ranting/rayon, Wilayah: PAC, Pusat: Cabang).
+    match /sk_templates/{id} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() && request.resource.data.org_id == myOrg()
+        && id == request.resource.data.org_id + '__' + request.resource.data.jenis
+        && skJenisOk(request.resource.data.jenis)
+        && request.resource.data.keys().hasOnly(['org_id','jenis','nama_berkas','tipe','ukuran','chunks','updated_at']);
+      allow delete: if isAdmin() && resource.data.org_id == myOrg();
+      match /chunks/{c} {
+        allow read: if signedIn();
+        allow create, update: if isAdmin() && id.split('__')[0] == myOrg()
+          && request.resource.data.keys().hasOnly(['i','data']) && request.resource.data.data.size() <= 800000;
+        allow delete: if isAdmin() && id.split('__')[0] == myOrg();
+      }
+    }
+
+    // Desain sertifikat UKT: diunggah admin cabang, satu per tingkat.
+    match /ukt_templates/{id} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() && role() == 'admin_cabang' && request.resource.data.org_id == myOrg()
+        && id == request.resource.data.org_id + '__' + request.resource.data.level
+        && request.resource.data.image is string && request.resource.data.image.size() < 960000;
+      allow delete: if isAdmin() && role() == 'admin_cabang' && resource.data.org_id == myOrg();
+    }
+    // Penomoran (sertifikat per tingkat: KODECABANG_Kuning, nomor urut SK: KODEUNIT_SK2026). Dapat diatur admin unit pemilik.
+    match /counters/{id} {
+      allow read: if isAdmin() && id.split('_')[0] == myOrg();
+      allow create, update: if isAdmin() && id.split('_')[0] == myOrg()
+        && request.resource.data.keys().hasOnly(['n','format'])
+        && request.resource.data.n is int && request.resource.data.n >= 0
+        && (!('format' in request.resource.data) || (request.resource.data.format is string && request.resource.data.format.size() <= 120));
+    }
+
+    // Tanda tangan digital ketua & sekretaris (privat, hanya admin unit itu).
+    match /org_signatures/{id} {
+      allow read: if isAdmin() && id == myOrg();
+      allow write: if isAdmin() && id == myOrg()
+        && request.resource.data.keys().hasOnly(['ketua','sekretaris','updated_at'])
+        && (!('ketua' in request.resource.data) || request.resource.data.ketua.size() < 450000)
+        && (!('sekretaris' in request.resource.data) || request.resource.data.sekretaris.size() < 450000);
+    }
+
+    // ---------- Pelatihan: Pelatih (minimal sabuk Coklat) dan Wasit Juri (Internal / IPSI Kab-Kota, Provinsi, Nasional) ----------
+    // Ranting/Rayon mendaftarkan -> PAC memverifikasi -> PAC membayar ke Cabang + unggah bukti -> Cabang memverifikasi pembayaran.
+    match /pelatihan_registrations/{id} {
+      allow read: if isAdmin() && myOrg() in resource.data.hierarki_path;
+      allow create: if isAdmin() && role() in ['admin_ranting','admin_rayon','admin_pac']
+        && request.resource.data.keys().hasOnly(['uid','nama_peserta','org_id','pac_id','cabang_id','hierarki_path','sabuk','periode','program','jenis','jenjang_ipsi','status','riwayat','created_by','created_at'])
+        && (request.resource.data.org_id == myOrg() || (role() == 'admin_pac' && inScopeOrg(request.resource.data.org_id)))
+        && request.resource.data.status == 'diajukan'
+        && request.resource.data.program in ['pelatih','wasit_juri']
+        && (request.resource.data.program == 'wasit_juri' || request.resource.data.sabuk in ['Coklat','Hitam'])
+        && (request.resource.data.program == 'pelatih'
+            || (request.resource.data.jenis in ['internal','ipsi']
+                && (request.resource.data.jenis == 'internal' || request.resource.data.jenjang_ipsi in ['kabupaten','provinsi','nasional'])))
+        && request.resource.data.created_by == request.auth.uid
+        && request.resource.data.hierarki_path == orgPath(request.resource.data.org_id);
+      allow update: if isAdmin() && myOrg() in resource.data.hierarki_path
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','catatan_revisi','riwayat','updated_at','pembayaran_id','rekomendasi'])
+        && (
+          (role() == 'admin_pac' && resource.data.status == 'diajukan'
+            && request.resource.data.status in ['diverifikasi_pac','revisi'])
+          || (role() == 'admin_pac' && resource.data.status == 'diverifikasi_pac' && request.resource.data.status == 'menunggu_bayar'
+            && request.resource.data.pembayaran_id is string
+            && getAfter(/databases/$(db)/documents/pelatihan_payments/$(request.resource.data.pembayaran_id)).data.pac_id == myOrg())
+          || (role() == 'admin_cabang' && resource.data.status == 'menunggu_bayar' && (
+                (request.resource.data.status == 'terdaftar'
+                  && getAfter(/databases/$(db)/documents/pelatihan_payments/$(resource.data.pembayaran_id)).data.status == 'terverifikasi')
+                || (request.resource.data.status == 'diverifikasi_pac'
+                  && getAfter(/databases/$(db)/documents/pelatihan_payments/$(resource.data.pembayaran_id)).data.status == 'ditolak')))
+          || (role() in ['admin_ranting','admin_rayon'] && resource.data.status == 'revisi' && request.resource.data.status == 'diajukan')
+          // Cabang menerbitkan surat rekomendasi Wasit Juri ke IPSI
+          || (role() == 'admin_cabang' && resource.data.status == 'terdaftar' && resource.data.get('program', '') == 'wasit_juri'
+            && resource.data.get('jenis', '') == 'ipsi' && !('rekomendasi' in resource.data)
+            && request.resource.data.status == 'terdaftar' && request.resource.data.rekomendasi is map)
+        );
+      allow delete: if isAdmin() && resource.data.created_by == request.auth.uid && resource.data.status in ['diajukan','revisi'];
+      match /chunks/{c} {
+        allow read: if isAdmin() && myOrg() in get(/databases/$(db)/documents/pelatihan_registrations/$(id)).data.hierarki_path;
+        allow create, update: if isAdmin() && role() == 'admin_cabang'
+          && get(/databases/$(db)/documents/pelatihan_registrations/$(id)).data.cabang_id == myOrg()
+          && get(/databases/$(db)/documents/pelatihan_registrations/$(id)).data.status == 'terdaftar'
+          && request.resource.data.keys().hasOnly(['i','data']) && request.resource.data.data.size() <= 800000;
+        allow delete: if isAdmin() && role() == 'admin_cabang'
+          && get(/databases/$(db)/documents/pelatihan_registrations/$(id)).data.cabang_id == myOrg();
+      }
+    }
+    match /pelatihan_payments/{id} {
+      allow read: if isAdmin() && myOrg() in resource.data.hierarki_path;
+      allow create: if isAdmin() && role() == 'admin_pac'
+        && request.resource.data.keys().hasOnly(['pac_id','pac_nama','cabang_id','hierarki_path','program','peserta_ids','peserta_nama','jumlah','metode','rekening_info','bukti','status','catatan','riwayat','created_by','created_at'])
+        && request.resource.data.pac_id == myOrg()
+        && request.resource.data.cabang_id == orgParent(myOrg())
+        && request.resource.data.hierarki_path == orgPath(myOrg())
+        && request.resource.data.status == 'menunggu'
+        && request.resource.data.metode in ['transfer','qris']
+        && request.resource.data.program in ['pelatih','wasit_juri']
+        && request.resource.data.jumlah is number && request.resource.data.jumlah > 0
+        && request.resource.data.created_by == request.auth.uid;
+      allow update: if isAdmin() && role() == 'admin_cabang' && resource.data.cabang_id == myOrg()
+        && resource.data.status == 'menunggu' && request.resource.data.status in ['terverifikasi','ditolak']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','catatan','riwayat','updated_at']);
+      allow delete: if false;
+      match /chunks/{c} {
+        allow read: if isAdmin() && myOrg() in get(/databases/$(db)/documents/pelatihan_payments/$(id)).data.hierarki_path;
+        allow create, update: if isAdmin() && role() == 'admin_pac'
+          && get(/databases/$(db)/documents/pelatihan_payments/$(id)).data.pac_id == myOrg()
+          && get(/databases/$(db)/documents/pelatihan_payments/$(id)).data.status == 'menunggu'
+          && request.resource.data.keys().hasOnly(['i','data']) && request.resource.data.data.size() <= 800000;
+        allow delete: if isAdmin() && role() == 'admin_pac' && get(/databases/$(db)/documents/pelatihan_payments/$(id)).data.pac_id == myOrg();
+      }
+    }
+    // Nomor rekening & QRIS cabang (CRUD oleh cabang, terbaca PAC di bawahnya)
+    match /payment_accounts/{id} {
+      allow read: if isAdmin() && resource.data.org_id in myPath();
+      allow create: if isAdmin() && role() == 'admin_cabang' && request.resource.data.org_id == myOrg()
+        && request.resource.data.tipe in ['rekening','qris']
+        && request.resource.data.keys().hasOnly(['org_id','tipe','bank','nomor','atas_nama','image','keterangan','aktif','created_at','updated_at'])
+        && (request.resource.data.tipe == 'rekening' || (request.resource.data.image is string && request.resource.data.image.size() < 960000));
+      allow update: if isAdmin() && role() == 'admin_cabang' && resource.data.org_id == myOrg() && request.resource.data.org_id == myOrg()
+        && request.resource.data.tipe in ['rekening','qris']
+        && request.resource.data.keys().hasOnly(['org_id','tipe','bank','nomor','atas_nama','image','keterangan','aktif','created_at','updated_at'])
+        && (request.resource.data.tipe == 'rekening' || (request.resource.data.image is string && request.resource.data.image.size() < 960000));
+      allow delete: if isAdmin() && role() == 'admin_cabang' && resource.data.org_id == myOrg();
+    }
+    match /pelatihan_settings/{id} {
+      allow read: if isAdmin() && id in myPath();
+      allow write: if isAdmin() && role() == 'admin_cabang' && id == myOrg()
+        && request.resource.data.keys().hasOnly(['biaya','biaya_wj_internal','biaya_wj_ipsi','keterangan','updated_at'])
+        && request.resource.data.biaya is number && request.resource.data.biaya >= 0
+        && (!('biaya_wj_internal' in request.resource.data) || (request.resource.data.biaya_wj_internal is number && request.resource.data.biaya_wj_internal >= 0))
+        && (!('biaya_wj_ipsi' in request.resource.data) || (request.resource.data.biaya_wj_ipsi is number && request.resource.data.biaya_wj_ipsi >= 0));
+    }
+
+    // ---------- Keuangan ----------
+    match /financial_reports/{id} {
+      allow read: if isAdmin() && resource.data.org_id == myOrg();
+      allow create: if isAdmin() && request.resource.data.org_id == myOrg()
+        && request.resource.data.dibuat_oleh == request.auth.uid
+        && request.resource.data.nominal is number && request.resource.data.nominal > 0
+        && request.resource.data.tipe in ['pemasukan','pengeluaran']
+        && (!('donasi_id' in request.resource.data)
+            || (request.resource.data.tipe == 'pemasukan'
+                && donAfter(request.resource.data.donasi_id).status == 'diterima'
+                && donAfter(request.resource.data.donasi_id).to_org == myOrg()
+                && donAfter(request.resource.data.donasi_id).nominal == request.resource.data.nominal));
+      allow update: if isAdmin() && resource.data.org_id == myOrg() && request.resource.data.org_id == myOrg()
+        && !('donasi_id' in resource.data)
+        && request.resource.data.nominal is number && request.resource.data.nominal > 0
+        && request.resource.data.tipe in ['pemasukan','pengeluaran'];
+      allow delete: if isAdmin() && resource.data.org_id == myOrg() && !('donasi_id' in resource.data);
+    }
+    match /unit_donations/{id} {
+      allow read: if isAdmin() && (resource.data.from_org == myOrg() || resource.data.to_org == myOrg());
+      allow create: if isAdmin() && role() in ['admin_rayon','admin_ranting']
+        && request.resource.data.from_org == myOrg()
+        && request.resource.data.to_org == orgParent(myOrg())
+        && request.resource.data.status == 'menunggu'
+        && request.resource.data.dibuat_oleh == request.auth.uid
+        && request.resource.data.nominal is number && request.resource.data.nominal > 0;
+      allow update: if isAdmin() && resource.data.to_org == myOrg() && resource.data.status == 'menunggu'
+        && request.resource.data.status in ['diterima','ditolak']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updated_at']);
+      allow delete: if isAdmin() && resource.data.from_org == myOrg() && resource.data.status == 'menunggu';
+    }
+
+    match /donations/{id}      { allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin()); allow write: if false; }
+    match /nusapay_ledger/{id} { allow read: if signedIn() && resource.data.uid == request.auth.uid; allow write: if false; }
+    match /products/{id}       { allow read: if signedIn(); allow write: if false; }
+    match /orders/{id}         { allow read: if signedIn() && resource.data.pembeli_uid == request.auth.uid; allow write: if false; }
+
+    // Audit: dibuat bersamaan dengan perubahan role (harus cocok dengan role baru pada dokumen users).
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.pelaku_uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['aksi','pelaku_uid','pelaku_nama','target_uid','target_nama','role_lama','role_baru','timestamp'])
+        && getAfter(/databases/$(db)/documents/users/$(request.resource.data.target_uid)).data.role == request.resource.data.role_baru;
+      allow update, delete: if false;
+    }
+  }
+}

@@ -1,0 +1,64 @@
+/* Responsif untuk tablet & HP (web dan Capacitor). Dimuat setelah style.css. */
+html{-webkit-text-size-adjust:100%}
+button,a.btn,select,label{touch-action:manipulation}
+.burger,.scrim{display:none}
+.side-user{font-size:13px;color:var(--sideink);opacity:.85;padding:2px 10px 0;overflow-wrap:anywhere}
+
+@media (max-width:860px){
+  #app{display:block}
+  /* menu samping menjadi laci geser */
+  .burger{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;font-size:22px;line-height:1;flex:none;order:1}
+  aside{position:fixed;top:0;bottom:0;left:0;height:100%;width:min(84vw,300px);z-index:40;transform:translateX(-102%);transition:transform .22s ease;overflow-y:auto;padding:calc(16px + env(safe-area-inset-top,0px)) 12px calc(16px + env(safe-area-inset-bottom,0px)) calc(12px + env(safe-area-inset-left,0px))}
+  body.nav-open aside{transform:none;box-shadow:0 0 40px rgba(0,0,0,.4)}
+  .scrim{display:block;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.45);z-index:30;opacity:0;pointer-events:none;transition:opacity .2s}
+  body.nav-open .scrim{opacity:1;pointer-events:auto}
+  nav{flex-direction:column;overflow:visible;margin-top:14px}
+  nav a,nav button.navg{min-height:46px;display:flex;align-items:center;white-space:normal}
+  nav button.navg{width:100%;gap:0}
+  .navsub{flex-direction:column;margin:0 0 6px 14px;padding-left:8px;border-left:1px solid rgba(255,255,255,.18)}
+  .navsub a{min-height:44px;font-size:15px;white-space:normal}
+
+  /* tajuk menempel di atas */
+  main{padding:0 max(14px,env(safe-area-inset-right,0px)) calc(28px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
+  header.top{position:sticky;top:0;z-index:20;background:var(--bg);margin:0 -14px 14px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;gap:8px;border-bottom:1px solid var(--line)}
+  header.top h1{order:2;flex:1;font-size:20px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  header.top .who{order:3;width:100%;overflow-x:auto;gap:8px;padding-bottom:2px}
+  .who a.btn,.who button{flex:none}
+  #me{display:none}
+
+  /* sasaran sentuh & form */
+  input,select,textarea{font-size:16px;min-height:44px}
+  textarea{min-height:96px}
+  button,a.btn{min-height:44px;font-size:15px;padding:8px 14px}
+  .bar{flex-direction:column;align-items:stretch}
+  .bar input,.bar select{width:100%;flex:none;min-width:0}
+  .bar>button,.bar>a.btn{width:100%}
+  .grid{grid-template-columns:1fr 1fr;gap:10px}
+  .two{grid-template-columns:1fr}
+  .stat b{font-size:24px}
+  .login{margin:6vh auto}
+  #toast{left:12px;right:12px;transform:none;text-align:center}
+
+  /* dialog menjadi lembar dari bawah */
+  dialog{width:100vw;max-width:100vw;margin:auto 0 0;border-radius:18px 18px 0 0;max-height:92vh;padding:18px 16px calc(14px + env(safe-area-inset-bottom,0px))}
+  dialog .btns{position:sticky;bottom:0;background:var(--surf);padding-top:10px}
+  dialog .btns button{flex:1}
+}
+@media (max-width:380px){.grid{grid-template-columns:1fr}}
+
+/* tabel -> kartu vertikal di layar HP */
+@media (max-width:720px){
+  .tw{border:0;background:transparent;overflow:visible}
+  table.rt,table.rt tbody{display:block;min-width:0}
+  table.rt tr.rh{display:none}
+  table.rt tr{display:block;background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:8px 14px;margin:0 0 12px}
+  table.rt td{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;border:0;padding:8px 0;text-align:right;overflow-wrap:anywhere}
+  table.rt td+td{border-top:1px solid var(--line)}
+  table.rt td::before{content:attr(data-label);flex:0 0 36%;max-width:36%;text-align:left;color:var(--mute);font-size:12.5px;font-weight:600}
+  table.rt td:first-child{display:block;text-align:left;font-size:16px;font-weight:600;padding-top:4px}
+  table.rt td:first-child::before,table.rt td[data-label=""]::before,table.rt td.empty::before{content:none}
+  table.rt td[data-label=""]{display:block;text-align:left}
+  table.rt td.empty{display:block;text-align:center}
+  table.rt td .act{gap:8px}
+  table.rt td .act button,table.rt td .act a.btn{flex:1 1 calc(50% - 8px)}
+}

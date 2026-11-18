@@ -1,0 +1,26 @@
+:root{--bg:#f6f5ef;--surf:#fff;--ink:#1c2420;--mute:#66726b;--line:#dde2db;--acc:#1f6b4f;--gold:#b88a1e;--goldbg:#f6ecd0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1512;--surf:#18211c;--ink:#e6ece8;--mute:#93a198;--line:#2a362f;--acc:#4cbf93;--gold:#e0b64e;--goldbg:#3a3114}}
+*{box-sizing:border-box}html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:17px/1.65 "Public Sans",system-ui,sans-serif}
+a{color:var(--acc)}
+.wrap{max-width:860px;margin:0 auto;padding:0 20px}
+header.hd{background:#12382c;color:#e8f1ec;padding:28px 0 22px}
+header.hd .crumbs{font-size:13.5px;opacity:.85;margin-bottom:10px}header.hd .crumbs a{color:#cfe0d6;text-decoration:none}header.hd .crumbs a:hover{text-decoration:underline}
+header.hd h1{font:600 clamp(26px,5vw,38px)/1.2 Fraunces,Georgia,serif;margin:0;color:#fff}
+.tag{display:inline-block;background:#f1e3b5;color:#2b2205;border-radius:20px;padding:1px 12px;font-size:13px;font-weight:600;margin-top:10px}
+nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:20px 0 4px}
+nav.tabs a{padding:7px 14px;border-radius:20px;border:1px solid var(--line);text-decoration:none;color:var(--ink);font-size:15px;background:var(--surf)}
+nav.tabs a.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:14px 0}
+.post{display:block;text-decoration:none;color:inherit}.post:hover h3{text-decoration:underline}
+.post h3{font:600 21px/1.3 Fraunces,Georgia,serif;margin:6px 0}
+.meta{font-size:13.5px;color:var(--mute)}.pill{display:inline-block;background:var(--goldbg);color:var(--gold);border-radius:20px;padding:0 10px;font-size:12.5px;font-weight:600}
+.excerpt{color:var(--mute);margin:4px 0 0}
+h2.sec{font:600 22px Fraunces,Georgia,serif;margin:30px 0 4px}
+.art h1{font:600 clamp(26px,5vw,36px)/1.25 Fraunces,Georgia,serif;margin:8px 0}.art p{margin:0 0 1.1em}
+.kids{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.kids a{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surf);text-decoration:none;color:var(--ink)}
+.kids a small{display:block;color:var(--mute)}
+.info dt{font-size:13px;color:var(--mute);margin-top:10px}.info dd{margin:0}
+footer{padding:36px 0 50px;color:var(--mute);font-size:14px;text-align:center}
+.empty{color:var(--mute);padding:20px 0}

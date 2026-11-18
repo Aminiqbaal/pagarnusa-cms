@@ -1,0 +1,13 @@
+{
+  "app": "Pagar Nusa CMS",
+  "version": "1.0.0",
+  "versionCode": 1,
+  "fileName": "pagar-nusa-cms.apk",
+  "github": { "owner": "GANTI_OWNER", "repo": "GANTI_REPO" },
+  "downloadUrl": "",
+  "releasedAt": "2026-11-17",
+  "minAndroid": "7.0",
+  "sizeMB": null,
+  "sha256": "",
+  "notes": ""
+}

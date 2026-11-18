@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pagar Nusa CMS</string>
+    <string name="title_activity_main">Pagar Nusa CMS</string>
+    <string name="package_name">id.pagarnusa.cms</string>
+    <string name="custom_url_scheme">id.pagarnusa.cms</string>
+</resources>

@@ -1,0 +1,32 @@
+# dependensi & hasil build
+node_modules
+dist
+.vercel
+.firebase
+
+# rahasia (JANGAN di-commit)
+.env
+.env.*
+!.env.example
+serviceAccount*.json
+*-firebase-adminsdk-*.json
+*.jks
+*.keystore
+*.p12
+*.pfx
+keystore.properties
+
+# artefak Android / iOS
+*.apk
+*.aab
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/capacitor-cordova-android-plugins/
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+**/xcuserdata/
+.DS_Store
