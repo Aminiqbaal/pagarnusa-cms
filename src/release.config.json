@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "versionCode": 1,
   "fileName": "pagar-nusa-cms.apk",
-  "github": { "owner": "GANTI_OWNER", "repo": "GANTI_REPO" },
+  "github": {
+    "owner": "Aminiqbaal",
+    "repo": "pagarnusa-cms"
+  },
   "downloadUrl": "",
   "releasedAt": "2026-11-17",
   "minAndroid": "7.0",

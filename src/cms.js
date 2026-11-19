@@ -3,6 +3,7 @@ import "./responsive.css";
 import { enhanceTables } from "./ui/responsive.js";
 import { apkButtonHTML } from "./components/download-apk.js";
 import { isNative } from "./native.js";
+import relCfg from "./release.config.json";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
 import {
   collection, doc, onSnapshot, query, where, orderBy, limit,
@@ -29,8 +30,8 @@ const DEF_FMT = "{kode}/UKT-{TINGKAT}/{tahun}/{urut}";
 const nomorFmt = (f, o) => String(f || DEF_FMT).replace(/\{urut\}/g, String(o.urut).padStart(4, "0")).replace(/\{kode\}/g, o.kode).replace(/\{TINGKAT\}/g, o.level.toUpperCase()).replace(/\{tingkat\}/g, o.level).replace(/\{tahun\}/g, o.year);
 const PLS = { diajukan: "Diajukan", diverifikasi_pac: "Diverifikasi PAC", menunggu_bayar: "Menunggu verifikasi pembayaran", terdaftar: "Terdaftar", revisi: "Perlu revisi" };
 const PAYS = { menunggu: "Menunggu verifikasi", terverifikasi: "Terverifikasi", ditolak: "Ditolak" };
-const MENUS = [["dasbor", "Dashboard"], ["konten", "Konten"], ["kategori", "Kategori konten"], ["anggota", "Anggota"], ["ukt", "Verifikasi UKT"], ["pelatihan", "Pelatihan"], ["keuangan", "Keuangan"], ["sk", "SK Kepengurusan"], ["profil", "Profil & website"], ["role", "Role & menu"], ["audit", "Audit log"]];
-const defMenus = (r) => (LV[r] >= 4 ? ["dasbor", "konten", "kategori", "anggota", "ukt", "pelatihan", "keuangan", "sk", "profil"] : MENUS.map((m) => m[0]));
+const MENUS = [["dasbor", "Dashboard"], ["konten", "Konten"], ["kategori", "Kategori konten"], ["anggota", "Anggota"], ["ukt", "Verifikasi UKT"], ["pelatihan", "Pelatihan"], ["keuangan", "Keuangan"], ["sk", "SK Kepengurusan"], ["profil", "Profil & website"], ["role", "Role & menu"], ["rilis", "Rilis aplikasi"], ["audit", "Audit log"]];
+const defMenus = (r) => (LV[r] >= 4 ? ["dasbor", "konten", "kategori", "anggota", "ukt", "pelatihan", "keuangan", "sk", "profil"] : MENUS.map((m) => m[0]).filter((k) => k !== "rilis" || r === "super_admin"));
 
 const S = {
   me: null, orgs: {}, posts: [], upPosts: {}, cats: [], users: [], ukt: [], kas: [], donOut: [], donIn: [],
@@ -175,7 +176,7 @@ function myMenus() {
   const p = S.me.path;
   const c = S.myCfg.filter((x) => x.org_id !== S.me.org_id && p.includes(x.org_id)).sort((a, b) => p.indexOf(b.org_id) - p.indexOf(a.org_id))[0];
   const m = c ? c.menus : defMenus(S.me.role);
-  return MENUS.filter(([k]) => k === "dasbor" || m.includes(k));
+  return MENUS.filter(([k]) => (k === "dasbor" || m.includes(k)) && (k !== "rilis" || S.me.role === "super_admin"));
 }
 const ownsPost = (p) => !!p.hierarki_path?.includes(S.me.org_id);
 function allPosts() {
@@ -267,9 +268,9 @@ function navRender(menus) {
     return `<button class="navg ${items.some((i) => i[0] === v) ? "has-on" : ""}" data-grp="${g.id}" aria-expanded="${open}" aria-controls="sub-${g.id}"><span>${g.label}${num(n)}</span><span class="chev" aria-hidden="true">▾</span></button>
       <div class="navsub ${open ? "open" : ""}" id="sub-${g.id}">${items.map(([id, l]) => link(id, l)).join("")}</div>`;
   };
-  $("#nav").innerHTML = single("dasbor") + GROUPS.map(group).join("") + single("keuangan") + single("role") + single("audit");
+  $("#nav").innerHTML = single("dasbor") + GROUPS.map(group).join("") + single("keuangan") + single("role") + single("rilis") + single("audit");
 }
-const VIEWS = { dasbor, konten, kategori: kategoriView, anggota, ukt, "pelatihan-pelatih": () => pelatihan("pelatih"), "pelatihan-wasit": () => pelatihan("wasit_juri"), keuangan, sk, profil, role: roleView, audit };
+const VIEWS = { dasbor, konten, kategori: kategoriView, anggota, ukt, "pelatihan-pelatih": () => pelatihan("pelatih"), "pelatihan-wasit": () => pelatihan("wasit_juri"), keuangan, sk, profil, role: roleView, rilis, audit };
 function render() {
   if (!S.me || !$("#view")) return;
   const menus = myMenus(), ok = menus.map((m) => m[0]);
@@ -279,7 +280,7 @@ function render() {
   S.v = v; navRender(menus);
   $("#ttl").textContent = v.startsWith("pelatihan-") ? "Pelatihan · " + (v === "pelatihan-wasit" ? "Wasit Juri" : "Pelatih") : MENUS.find((m) => m[0] === v)[1];
   const active = document.activeElement?.id;
-  if (["profil"].includes(v) && ["p1", "p2", "p3", "p4", "p5", "p6"].includes(active)) return; // jangan timpa isian yang sedang diketik
+  if (["profil", "rilis"].includes(v) && ["p1", "p2", "p3", "p4", "p5", "p6", "rv", "rn"].includes(active)) return; // jangan timpa isian yang sedang diketik
   VIEWS[v]();
   enhanceTables($("#view"));
   if (active === "q") { const q = $("#q"); q?.focus(); q?.setSelectionRange(q.value.length, q.value.length); }
@@ -1205,6 +1206,30 @@ function typeForm(id) {
     });
 }
 
+/* ---------- rilis aplikasi (khusus Super Admin) ---------- */
+const RELEASE_API = (import.meta.env.VITE_RELEASE_API || "").replace(/\/$/, "") || SITE;
+function rilis() {
+  const [a, b, c] = String(relCfg.version).split(".").map(Number), next = `${a}.${b}.${(c || 0) + 1}`;
+  const ok = relCfg.github?.owner && !/^GANTI/i.test(relCfg.github.owner);
+  const actions = ok ? `https://github.com/${relCfg.github.owner}/${relCfg.github.repo}/actions/workflows/build-apk.yml` : "";
+  $("#view").innerHTML = `<p class="mute">Bangun dan rilis APK Android langsung dari website. Build berjalan di GitHub Actions (±8–15 menit). Setelah selesai, APK terbit di GitHub Releases dan tombol Download APK di web otomatis menyesuaikan setelah Vercel deploy ulang.</p>
+  <div class="grid"><div class="card stat"><b>v${esc(relCfg.version)}</b><span>Versi rilis di web saat ini</span></div><div class="card stat"><b>${esc(relCfg.releasedAt || "–")}</b><span>Tanggal rilis</span></div><div class="card stat"><b>${relCfg.sizeMB ? relCfg.sizeMB + " MB" : "–"}</b><span>Ukuran APK</span></div></div>
+  <div class="card">${fld("Versi baru (x.y.z)", "rv", next)}${fld("Catatan rilis (opsional)", "rn", "")}
+  <div class="btns"><button class="pri" data-act="rilis-go">Bangun &amp; rilis APK</button></div>
+  <p class="mini">${ok ? `Pantau prosesnya di <a href="${esc(actions)}" target="_blank" rel="noopener">GitHub Actions</a>.` : "Isi github.owner dan github.repo di src/release.config.json agar tautan pemantauan muncul."} Tombol ini memerlukan fungsi <code>/api/release-apk</code> di Vercel (lihat README).</p></div>`;
+}
+async function rilisGo() {
+  const version = val("rv"), notes = val("rn");
+  if (!/^\d+\.\d+\.\d+$/.test(version)) return toast("Format versi harus x.y.z, mis. 1.0.1.");
+  if (!confirm(`Bangun dan rilis APK versi ${version}?`)) return;
+  try {
+    const r = await fetch(`${RELEASE_API}/api/release-apk`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser.getIdToken()}` }, body: JSON.stringify({ version, notes }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || (r.status === 404 ? "Fungsi /api/release-apk tidak ditemukan (hanya ada di Vercel)." : "HTTP " + r.status));
+    toast(`Build APK v${version} dimulai. Pantau di GitHub Actions; hasilnya tampil di web setelah selesai.`);
+  } catch (e) { fail(e); }
+}
+
 /* ---------- audit ---------- */
 function audit() {
   $("#view").innerHTML = tbl(["Waktu", "Pelaku", "Target", "Perubahan"], S.audit.map((a) => `<tr><td>${fmt(a.timestamp)}</td><td>${esc(a.pelaku_nama || a.pelaku_uid)}</td><td>${esc(a.target_nama || a.target_uid)}</td><td>${RL[a.role_lama] || a.role_lama || "–"} → <b>${RL[a.role_baru] || a.role_baru}</b></td></tr>`).join(""), "Belum ada perubahan role.");
@@ -1237,6 +1262,7 @@ const ACT = {
   "sk-tpl-up": (j) => skTplUp(j), "sk-tpl-get": (id) => downloadFile("sk_templates", id),
   "sk-tpl-del": (id) => { if (confirm("Hapus template ini?")) run(deleteFile("sk_templates", id).then(() => toast("Template dihapus."))); },
   "cnt-edit": (l) => cntForm(l),
+  "rilis-go": () => rilisGo(),
   "sk-cnt": () => skCnt(), "sig-up": (k) => sigForm(k),
   "pl-add": () => plForm(curProg()), "pl-pay": () => plPay(curProg()),
   "wj-rek": (id) => wjRek(id), "rek-cnt": () => rekCntForm(),

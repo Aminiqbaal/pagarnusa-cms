@@ -27,7 +27,8 @@
     "@capacitor/ios": "^8.6.2",
     "@capacitor/share": "^8.0.3",
     "@capacitor/status-bar": "^8.0.4",
-    "firebase": "10.14.1"
+    "firebase": "10.14.1",
+    "jose": "^6.2.18"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.6.2",
