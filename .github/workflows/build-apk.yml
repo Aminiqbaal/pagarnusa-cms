@@ -52,7 +52,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       - name: Naikkan versi di konfigurasi rilis
         run: node scripts/release-set.cjs "$VERSION" --notes "$NOTES"
