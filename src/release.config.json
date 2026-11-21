@@ -1,16 +1,16 @@
 {
   "app": "Pagar Nusa CMS",
-  "version": "1.0.2",
-  "versionCode": 3,
+  "version": "1.0.3",
+  "versionCode": 4,
   "fileName": "pagar-nusa-cms.apk",
   "github": {
     "owner": "Aminiqbaal",
     "repo": "pagarnusa-cms"
   },
   "downloadUrl": "",
-  "releasedAt": "2026-11-20",
+  "releasedAt": "2026-11-21",
   "minAndroid": "7.0",
-  "sizeMB": 6.5,
+  "sizeMB": 4.9,
   "sha256": "",
   "notes": "Pagar Nusa CMS"
 }
