@@ -52,3 +52,7 @@ nav button.navg[aria-expanded="true"] .chev{transform:rotate(180deg)}
 .navsub.open{display:flex}
 .navsub a{padding:7px 12px;font-size:14.5px}
 
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:46px;height:46px;object-fit:contain;flex:none}
+.logo-lg{display:block;width:84px;height:84px;margin:0 auto 12px}
+.login h1{text-align:center}.login>.mute{text-align:center}

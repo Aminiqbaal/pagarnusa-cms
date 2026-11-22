@@ -92,7 +92,7 @@ onAuthStateChanged(auth, async (u) => {
 });
 
 function loginScreen() {
-  $("#app").innerHTML = `<div class="card login"><h1>CMS Admin</h1><p class="mute">Pagar Nusa Gresik. Masuk dengan akun pengurus.</p>
+  $("#app").innerHTML = `<div class="card login"><img class="logo logo-lg" src="/logo.png" alt="Logo Pagar Nusa"><h1>CMS Admin</h1><p class="mute">Pagar Nusa Gresik. Masuk dengan akun pengurus.</p>
   <label for="em">Email</label><input id="em" type="email" autocomplete="username">
   <label for="pw">Kata sandi</label><input id="pw" type="password" autocomplete="current-password">
   <div class="btns"><button class="pri" id="go">Masuk</button></div>${apkButtonHTML({ compact: true })}</div>`;
@@ -220,7 +220,7 @@ const badge = (k) => { const n = k === "ukt" ? todo() : k === "sk" ? skTodo() : 
 
 /* ---------- shell & routing ---------- */
 function shell() {
-  $("#app").innerHTML = `<aside><div class="brand">Pagar Nusa<small>CMS Admin · Gresik</small></div><div class="side-user" id="meSide"></div><nav id="nav"></nav></aside><div class="scrim" id="scrim"></div>
+  $("#app").innerHTML = `<aside><div class="brand"><img class="logo" src="/logo.png" alt="Logo Pagar Nusa"><span>Pagar Nusa<small>CMS Admin · Gresik</small></span></div><div class="side-user" id="meSide"></div><nav id="nav"></nav></aside><div class="scrim" id="scrim"></div>
   <main><header class="top"><button class="burger" id="burger" aria-label="Buka menu" aria-expanded="false">☰</button><h1 id="ttl"></h1>
   <div class="who"><span class="mute" id="me"></span><a class="btn pri" id="blog" href="${esc(siteUrl(S.orgs[S.me.org_id] || {}))}" target="_blank" rel="noopener">Lihat blog</a><button id="th">Tema</button><button id="out">Keluar</button></div></header><section id="view"></section></main>`;
   $("#out").onclick = () => signOut(auth);

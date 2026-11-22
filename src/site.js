@@ -19,7 +19,7 @@ function page(org, crumbs, tab, body) {
   document.title = `${org.nama_unit} – Pagar Nusa`;
   $app.innerHTML = `<header class="hd"><div class="wrap">
     <div class="crumbs">${crumbs.map((c) => `<a href="${href(c)}">${esc(c.nama_unit)}</a>`).join(" › ")}</div>
-    <h1>${esc(org.nama_unit)}</h1><span class="tag">${TNG[org.tingkat] || ""}</span></div></header>
+    <div class="hd-row"><img class="logo" src="/logo.png" alt="Logo Pagar Nusa"><h1>${esc(org.nama_unit)}</h1></div><span class="tag">${TNG[org.tingkat] || ""}</span></div></header>
   <main class="wrap"><nav class="tabs">
     <a href="${href(org)}" class="${tab === "home" ? "on" : ""}">Beranda</a>
     <a href="${href(org)}?v=profil" class="${tab === "profil" ? "on" : ""}">Profil</a>
