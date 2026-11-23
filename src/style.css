@@ -56,3 +56,5 @@ nav button.navg[aria-expanded="true"] .chev{transform:rotate(180deg)}
 .logo{width:46px;height:46px;object-fit:contain;flex:none}
 .logo-lg{display:block;width:84px;height:84px;margin:0 auto 12px}
 .login h1{text-align:center}.login>.mute{text-align:center}
+button.linkbtn,a.linkbtn{background:none;border:0;color:var(--acc);padding:8px 4px;text-decoration:underline;cursor:pointer;min-height:auto;font:inherit}
+.login .btns{justify-content:space-between;align-items:center}

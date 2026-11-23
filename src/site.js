@@ -23,7 +23,7 @@ function page(org, crumbs, tab, body) {
   <main class="wrap"><nav class="tabs">
     <a href="${href(org)}" class="${tab === "home" ? "on" : ""}">Beranda</a>
     <a href="${href(org)}?v=profil" class="${tab === "profil" ? "on" : ""}">Profil</a>
-    <a href="${href(org)}?v=unit" class="${tab === "unit" ? "on" : ""}">Unit di bawah</a></nav>${body}</main>
+    <a href="${href(org)}?v=unit" class="${tab === "unit" ? "on" : ""}">Unit di bawah</a><a class="login-link" href="/admin">Masuk pengurus</a></nav>${body}</main>
   <footer><div class="wrap">Pagar Nusa · ${esc(org.nama_unit)}<div id="apk"></div></div></footer>`;
   mountApkButton(document.getElementById("apk"), { compact: true });
 }

@@ -20,4 +20,12 @@ addEventListener("error", (e) => showFatal(e.error || e.message));
 addEventListener("unhandledrejection", (e) => showFatal(e.reason));
 
 const p = location.pathname.replace(/\/+$/, "");
-(isNative() || p === "/admin" || p.startsWith("/admin/") ? import("./cms.js") : import("./site.js")).catch(showFatal);
+async function pick() {
+  if (p === "/admin" || p.startsWith("/admin/")) return import("./cms.js");
+  if (isNative()) {
+    // Aplikasi: sudah login -> langsung CMS; belum login -> berita Pengurus Pusat (dengan tombol "Masuk pengurus").
+    try { const { auth } = await import("./firebase.js"); await auth.authStateReady(); if (auth.currentUser) return import("./cms.js"); } catch { /* lanjut ke website */ }
+  }
+  return import("./site.js");
+}
+pick().catch(showFatal);

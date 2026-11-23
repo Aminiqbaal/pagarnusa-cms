@@ -4,7 +4,7 @@ import { enhanceTables } from "./ui/responsive.js";
 import { apkButtonHTML } from "./components/download-apk.js";
 import { isNative } from "./native.js";
 import relCfg from "./release.config.json";
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword, updatePassword, sendPasswordResetEmail } from "firebase/auth";
 import {
   collection, doc, onSnapshot, query, where, orderBy, limit,
   addDoc, updateDoc, deleteDoc, setDoc, getDoc, getDocs, writeBatch, runTransaction, serverTimestamp, Timestamp,
@@ -58,6 +58,10 @@ const btn = (act, id, label, cls = "", dis = false) => `<button class="${cls}" d
 const errMsg = (e) => ({ "auth/email-already-in-use": "Email sudah terdaftar.", "auth/invalid-email": "Format email tidak valid.", "permission-denied": "Ditolak oleh aturan akses (permission-denied)." }[e.code] || e.code || e.message);
 const hist = (status, catatan) => ({ status, oleh: S.me.nama, tanggal: new Date().toISOString(), ...(catatan ? { catatan } : {}) });
 
+async function logout() { await signOut(auth); if (isNative()) location.assign("/"); }
+const auditText = (a) => (a.aksi === "RESET_PASSWORD" ? "reset kata sandi" : RL[a.role_baru] || a.role_baru);
+const auditChange = (a) => (a.aksi === "RESET_PASSWORD" ? "Reset kata sandi ke default" : `${RL[a.role_lama] || a.role_lama || "–"} → <b>${RL[a.role_baru] || a.role_baru}</b>`);
+
 function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("on"), 3800); }
 const fail = (e) => toast("Gagal: " + errMsg(e));
 function dlg(html) { const d = $("#dlg"); d.innerHTML = html; d.showModal(); }
@@ -91,11 +95,25 @@ onAuthStateChanged(auth, async (u) => {
   shell();
 });
 
+function forgotForm() {
+  modal("Lupa kata sandi", `<p class="mute">Masukkan email akun Anda. Tautan untuk membuat kata sandi baru akan dikirim ke email tersebut.</p>${fld("Email", "fe", $("#em")?.value.trim() || "", "email")}`, async () => {
+    const em = val("fe");
+    if (!/^\S+@\S+\.\S+$/.test(em)) { toast("Format email tidak valid."); return false; }
+    try { await sendPasswordResetEmail(auth, em); }
+    catch (e) {
+      if (e.code === "auth/too-many-requests") { toast("Terlalu banyak percobaan. Coba lagi nanti."); return false; }
+      if (e.code !== "auth/user-not-found") throw e;
+    }
+    toast("Jika email terdaftar, tautan atur ulang kata sandi sudah dikirim. Periksa juga folder spam.");
+  }, "Kirim tautan");
+}
+
 function loginScreen() {
   $("#app").innerHTML = `<div class="card login"><img class="logo logo-lg" src="/logo.png" alt="Logo Pagar Nusa"><h1>CMS Admin</h1><p class="mute">Pagar Nusa Gresik. Masuk dengan akun pengurus.</p>
   <label for="em">Email</label><input id="em" type="email" autocomplete="username">
   <label for="pw">Kata sandi</label><input id="pw" type="password" autocomplete="current-password">
-  <div class="btns"><button class="pri" id="go">Masuk</button></div>${apkButtonHTML({ compact: true })}</div>`;
+  <div class="btns"><button class="linkbtn" id="forgot" type="button">Lupa kata sandi?</button><button class="pri" id="go">Masuk</button></div>${apkButtonHTML({ compact: true })}
+  <p style="text-align:center;margin:14px 0 0"><a class="linkbtn" href="/">← Kembali ke berita</a></p></div>`;
   const go = async () => {
     const em = $("#em").value.trim(), pw = $("#pw").value;
     // Kata sandi awal anggota baru = alamat email -> wajib diganti sebelum memakai CMS.
@@ -104,6 +122,7 @@ function loginScreen() {
     catch (e) { sessionStorage.removeItem("pn_force_pw"); toast(e.code === "auth/invalid-credential" ? "Email atau kata sandi salah." : "Gagal masuk: " + e.code); }
   };
   $("#go").onclick = go;
+  $("#forgot").onclick = forgotForm;
   $("#pw").onkeydown = (e) => { if (e.key === "Enter") go(); };
 }
 
@@ -113,7 +132,7 @@ function changePwScreen(u) {
   <label for="n1">Kata sandi baru (minimal 8 karakter)</label><input id="n1" type="password" autocomplete="new-password">
   <label for="n2">Ulangi kata sandi baru</label><input id="n2" type="password" autocomplete="new-password">
   <div class="btns"><button id="out">Keluar</button><button class="pri" id="go">Simpan</button></div></div>`;
-  $("#out").onclick = () => signOut(auth);
+  $("#out").onclick = logout;
   $("#go").onclick = async () => {
     const a = $("#n1").value, b = $("#n2").value;
     if (a.length < 8) return toast("Kata sandi minimal 8 karakter.");
@@ -127,7 +146,7 @@ function blocked(u, role) {
   $("#app").innerHTML = `<div class="card login"><h1>Akses belum tersedia</h1>
   <p class="mute">${role === "member" ? "CMS hanya untuk pengurus." : "Akun " + esc(u.email) + " belum diberi role pengurus."} Minta admin menetapkan jabatan Anda, atau jalankan <code>npm run set-role</code> untuk admin pertama. Setelah itu keluar dan masuk lagi.</p>
   <div class="btns"><button id="out">Keluar</button></div></div>`;
-  $("#out").onclick = () => signOut(auth);
+  $("#out").onclick = logout;
 }
 
 /* ---------- data real-time ---------- */
@@ -223,7 +242,7 @@ function shell() {
   $("#app").innerHTML = `<aside><div class="brand"><img class="logo" src="/logo.png" alt="Logo Pagar Nusa"><span>Pagar Nusa<small>CMS Admin · Gresik</small></span></div><div class="side-user" id="meSide"></div><nav id="nav"></nav></aside><div class="scrim" id="scrim"></div>
   <main><header class="top"><button class="burger" id="burger" aria-label="Buka menu" aria-expanded="false">☰</button><h1 id="ttl"></h1>
   <div class="who"><span class="mute" id="me"></span><a class="btn pri" id="blog" href="${esc(siteUrl(S.orgs[S.me.org_id] || {}))}" target="_blank" rel="noopener">Lihat blog</a><button id="th">Tema</button><button id="out">Keluar</button></div></header><section id="view"></section></main>`;
-  $("#out").onclick = () => signOut(auth);
+  $("#out").onclick = logout;
   const setNav = (open) => { document.body.classList.toggle("nav-open", open); $("#burger").setAttribute("aria-expanded", String(open)); };
   $("#burger").onclick = () => setNav(!document.body.classList.contains("nav-open"));
   $("#scrim").onclick = () => setNav(false);
@@ -297,7 +316,7 @@ function dasbor() {
    <div class="card stat"><b>${skTodo()}</b><span>SK menunggu tindakan Anda</span></div>
    <div class="card stat"><b>${R(f.ti - f.to)}</b><span>Saldo kas unit ini</span></div></div>
   <div class="two"><div class="card"><b>Konten terbaru</b>${p.slice(0, 4).map((x) => `<p style="margin:8px 0">${esc(x.judul)}<br><span class="mute">${esc(catName(x))} · ${esc(orgName(x.target_org_id))}</span></p>`).join("") || '<p class="empty">Belum ada konten.</p>'}</div>
-  <div class="card"><b>Aktivitas role</b>${S.audit.slice(0, 3).map((a) => `<p style="margin:8px 0">${esc(a.pelaku_nama || a.pelaku_uid)} → ${esc(a.target_nama || a.target_uid)}: ${RL[a.role_baru] || a.role_baru}<br><span class="mute">${fmt(a.timestamp)}</span></p>`).join("") || '<p class="empty">Belum ada.</p>'}</div></div>`;
+  <div class="card"><b>Aktivitas role</b>${S.audit.slice(0, 3).map((a) => `<p style="margin:8px 0">${esc(a.pelaku_nama || a.pelaku_uid)} → ${esc(a.target_nama || a.target_uid)}: ${auditText(a)}<br><span class="mute">${fmt(a.timestamp)}</span></p>`).join("") || '<p class="empty">Belum ada.</p>'}</div></div>`;
 }
 
 /* ---------- konten ---------- */
@@ -410,6 +429,7 @@ const roleOpts = (orgId) => {
   if (S.me.role === "super_admin" && S.orgs[orgId]?.tingkat === "pusat") o.push(["super_admin", "Super Admin"]);
   return o;
 };
+const canReset = (u) => u.id !== S.me.uid && LV[u.role] > LV[S.me.role] && !!u.email;
 const canChange = (u) => u.id !== S.me.uid && LV[u.role] > LV[S.me.role] && roleOpts(u.org_id).some((o) => o[0] !== u.role);
 
 function anggota() {
@@ -418,7 +438,7 @@ function anggota() {
   tbl(["Nama", "NIA", "Unit", "Role", "Sabuk", "Kualifikasi", ""], S.users.filter((u) => [u.nama_lengkap, u.nia, u.email, orgName(u.org_id)].join(" ").toLowerCase().includes(S.mq.toLowerCase())).map((u) => `<tr><td>${esc(u.nama_lengkap)}<br><span class="mini">${esc(u.email || "")}${u.status_aktif === false ? " · nonaktif" : ""}</span></td>
     <td>${esc(u.nia || "–")}</td><td>${esc(orgName(u.org_id))}</td><td><span class="pill role">${RL[u.role] || u.role}</span></td><td>${esc(u.sabuk || "–")}</td>
     <td>${(u.kualifikasi || []).map(qBadge).join(" ") || "–"}</td>
-    <td><div class="act">${btn("mem-edit", u.id, "Edit", "", u.id === S.me.uid)}${btn("mem-q", u.id, "Kualifikasi", "", u.id === S.me.uid)}${btn("mem-role", u.id, "Ubah jabatan", "", !canChange(u))}${btn("mem-act", u.id, u.status_aktif === false ? "Aktifkan" : "Nonaktifkan", "bad", u.id === S.me.uid)}</div></td></tr>`).join(""),
+    <td><div class="act">${btn("mem-edit", u.id, "Edit", "", u.id === S.me.uid)}${btn("mem-q", u.id, "Kualifikasi", "", u.id === S.me.uid)}${btn("mem-role", u.id, "Ubah jabatan", "", !canChange(u))}${btn("mem-reset", u.id, "Reset sandi", "", !canReset(u))}${btn("mem-act", u.id, u.status_aktif === false ? "Aktifkan" : "Nonaktifkan", "bad", u.id === S.me.uid)}</div></td></tr>`).join(""),
     "Belum ada anggota yang cocok.");
   $("#q").oninput = (e) => { S.mq = e.target.value; render(); };
 }
@@ -481,6 +501,27 @@ function qualModal(u) {
       await updateDoc(doc(db, "users", u.id), { kualifikasi: readBlocks(types, u.kualifikasi || []), updated_at: serverTimestamp() });
       toast("Kualifikasi disimpan.");
     }, "Simpan kualifikasi", () => bindBlocks(types));
+}
+
+function resetForm(u) {
+  if (!u?.email) return toast("Anggota ini tidak punya email.");
+  dlg(`<h2>Reset kata sandi ${esc(u.nama_lengkap)}</h2><p class="mute">${esc(u.email)}</p>
+  <p><b>Kembalikan ke default</b><br><span class="mini">Kata sandi menjadi alamat email anggota. Sesi login yang aktif dikeluarkan, dan anggota wajib menggantinya saat masuk berikutnya.</span></p>
+  <p><b>Kirim email atur ulang</b><br><span class="mini">Anggota menerima tautan untuk membuat kata sandi sendiri.</span></p>
+  <div class="btns"><button id="c">Batal</button><button id="r2">Kirim email</button><button class="pri" id="r1">Kembalikan ke default</button></div>`);
+  $("#c").onclick = closeDlg;
+  $("#r2").onclick = async () => {
+    try { await sendPasswordResetEmail(auth, u.email); closeDlg(); toast(`Tautan atur ulang dikirim ke ${u.email}.`); } catch (e) { fail(e); }
+  };
+  $("#r1").onclick = async () => {
+    if (!confirm(`Kembalikan kata sandi ${u.nama_lengkap} ke default (sama dengan emailnya)?`)) return;
+    try {
+      const r = await fetch(`${RELEASE_API}/api/reset-password`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${await auth.currentUser.getIdToken()}` }, body: JSON.stringify({ uid: u.id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || (r.status === 404 ? "Fungsi /api/reset-password tidak ditemukan (hanya ada di Vercel)." : "HTTP " + r.status));
+      closeDlg(); toast(`Kata sandi ${u.nama_lengkap} dikembalikan ke default (sama dengan emailnya).`);
+    } catch (e) { fail(e); }
+  };
 }
 
 function changeRoleForm(u) {
@@ -1232,7 +1273,7 @@ async function rilisGo() {
 
 /* ---------- audit ---------- */
 function audit() {
-  $("#view").innerHTML = tbl(["Waktu", "Pelaku", "Target", "Perubahan"], S.audit.map((a) => `<tr><td>${fmt(a.timestamp)}</td><td>${esc(a.pelaku_nama || a.pelaku_uid)}</td><td>${esc(a.target_nama || a.target_uid)}</td><td>${RL[a.role_lama] || a.role_lama || "–"} → <b>${RL[a.role_baru] || a.role_baru}</b></td></tr>`).join(""), "Belum ada perubahan role.");
+  $("#view").innerHTML = tbl(["Waktu", "Pelaku", "Target", "Perubahan"], S.audit.map((a) => `<tr><td>${fmt(a.timestamp)}</td><td>${esc(a.pelaku_nama || a.pelaku_uid)}</td><td>${esc(a.target_nama || a.target_uid)}</td><td>${auditChange(a)}</td></tr>`).join(""), "Belum ada catatan.");
 }
 
 /* ---------- aksi tombol ---------- */
@@ -1247,6 +1288,7 @@ const ACT = {
   "mem-add": () => memberForm(), "mem-edit": (id) => memberForm(id),
   "mem-q": (id) => qualModal(S.users.find((u) => u.id === id)),
   "mem-role": (id) => changeRoleForm(S.users.find((u) => u.id === id)),
+  "mem-reset": (id) => resetForm(S.users.find((u) => u.id === id)),
   "mem-act": (id) => { const u = S.users.find((x) => x.id === id), on = u.status_aktif === false; if (confirm(`${on ? "Aktifkan" : "Nonaktifkan"} ${u.nama_lengkap}?`)) run(updateDoc(doc(db, "users", id), { status_aktif: on, updated_at: serverTimestamp() }).then(() => toast(on ? "Anggota diaktifkan." : "Anggota dinonaktifkan."))); },
   "ukt-add": () => uktForm(), "ukt-ok": (id) => uktApprove(id),
   "ukt-rev": (id) => { const c = prompt("Catatan revisi untuk peserta:"); if (c) { const x = S.ukt.find((u) => u.id === id); uktUpdate(id, { status_verifikasi: "revisi", catatan_revisi: c, riwayat: [...(x.riwayat || []), hist("revisi", c)] }, "Permintaan revisi dikirim."); } },

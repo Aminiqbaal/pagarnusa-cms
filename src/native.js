@@ -14,8 +14,11 @@ export function initNative() {
     const d = document.getElementById("dlg");
     if (d?.open) return d.close();
     if (document.body.classList.contains("nav-open")) return document.body.classList.remove("nav-open");
-    const h = location.hash;
-    if (h && h !== "#dasbor") { if (canGoBack) history.back(); else location.hash = "#dasbor"; return; }
-    P.App.exitApp?.();
+    if (document.getElementById("nav")) { // di dalam CMS
+      const h = location.hash;
+      if (h && h !== "#dasbor") { if (canGoBack) history.back(); else location.hash = "#dasbor"; return; }
+      return P.App.exitApp?.();
+    }
+    if (canGoBack) history.back(); else P.App.exitApp?.(); // website publik / halaman login
   });
 }
